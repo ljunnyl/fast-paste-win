@@ -214,48 +214,25 @@ export function pickRequestPath(imagePath: string): string {
   return viewRequestPath(imagePath).replace(/view\.req$/, 'pick.req')
 }
 
-// 여러 장을 한 번에 넣을 글: 입력칸에 이미 있는 그림 수(before) 다음 번호부터 "@그림n " 을 이어 붙인다.
-// 이름(names)은 대응표에 적을 때 쓴다
-export function chipsText(before: number, count: number): { text: string; names: string[] } {
-  const names = Array.from({ length: count }, (_, i) => chipName(before + i + 1))
-  return { text: names.map(n => `@${n} `).join(''), names }
+// 여러 장을 한 번에 넣을 글: "@<경로> " 를 이어 붙인다.
+// 0.3.0: 별명("@imageN")과 prompt.mention 치환을 버리고 경로를 그대로 넣는다 — Claude Code 의 평범한 파일 언급이라
+// 별도 훅 없이 첨부되고, 플러그인 디렉터리가 prompt.mention 을 아직 모르는 이벤트로 막아서(2026-10-23 포털 Validate)
+export function pathsText(paths: string[]): string {
+  return paths.map(p => `@${p} `).join('')
 }
 
-// 보낼 글 속 "@그림n" 중 파일을 찾지 못한 이름들(대응표에 없거나, 대응 파일이 없는 것). 같은 이름은 한 번만
-export function missingChips(text: string, chips: { name: string; path: string }[], exists: (path: string) => boolean): string[] {
-  const names = [...new Set(findChips(text).map(c => c.name))]
-  return names.filter(n => {
-    const hit = chips.find(c => c.name === n)
-    return !hit || !exists(hit.path)
-  })
-}
-
-// 입력칸에 넣는 짧은 이름: n 번째 그림이면 "그림n" (입력칸에는 "@그림n" 으로 들어간다)
-export function chipName(n: number): string {
-  return `image${n}`
-}
-
-// 입력칸 글에서 "@그림n" 들의 위치와 이름을 찾는다
-export function findChips(text: string): { start: number; end: number; name: string }[] {
-  const out: { start: number; end: number; name: string }[] = []
-  for (const m of text.matchAll(/@(image\d+)/g)) out.push({ start: m.index ?? 0, end: (m.index ?? 0) + m[0].length, name: m[1] ?? '' })
+// 입력칸 글에서 이 모드가 넣은 그림 언급을 찾는다: "@…\.cfp\<번호>\<번호>.png" 꼴(감시 스크립트가 저장하는 경로 모양).
+// 다른 "@파일" 언급은 건드리지 않는다. 같은 경로는 한 번만
+export function findImageMentions(text: string): string[] {
+  const out: string[] = []
+  for (const m of text.matchAll(/@(\S*[\\/]\.cfp[\\/]\d+[\\/]\d+\.png)/g)) {
+    const p = m[1] ?? ''
+    if (p && !out.includes(p)) out.push(p)
+  }
   return out
 }
 
-// "@" 뒤에 적힌 글(mention)이 이 모드의 짧은 이름이면 그 이름을, 아니면 null (예: "그림2" → "그림2")
-export function chipOfMention(mention: string): string | null {
-  const m = /^(image\d+)$/.exec(mention.trim())
-  return m ? (m[1] ?? null) : null
-}
-
-// 입력칸 꾸미기: "@그림n" 앞뒤에 "[" "]" 를 덧그려 "[@그림n]" 으로 보이게 한다(실제 글자 아님).
-// "@" 는 숨길 수 없다: "@…" 글자는 Claude 가 직접 색을 칠해 모드의 색이 덮인다(2026-10-20 두 번 실측 — 경로·"@" 모두 그대로 보임).
-// "@" 가 없으면 Claude 가 파일로 알아보지 않아 첨부가 안 된다(같은 날 대화 기록 실측 0장)
-export type Decoration = { start: number; end: number; virtualText?: string; color?: string; bold?: boolean }
-export function decorationsFor(text: string): Decoration[] {
-  const mark = { color: 'suggestion', bold: true }
-  return findChips(text).flatMap(c => [
-    { start: c.start, end: c.start, virtualText: '[', ...mark },
-    { start: c.end, end: c.end, virtualText: ']', ...mark },
-  ])
+// 보낼 글 속 그림 언급 중 파일이 없어진 것들(감시가 지웠거나 세션이 바뀐 경우)
+export function missingImages(text: string, exists: (path: string) => boolean): string[] {
+  return findImageMentions(text).filter(p => !exists(p))
 }

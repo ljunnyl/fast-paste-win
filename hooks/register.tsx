@@ -1,24 +1,21 @@
 // 빠른 그림 붙여넣기: 세션 시작 때 클립보드 감시 PowerShell 을 하나 띄워 두고,
-// 그림이 복사되면 미리 저장 → 입력창 위에 "그림 준비됨 [붙이기(Alt+V)] [보기(Alt+I)]"
-// → 붙이면 입력칸 커서 위치에 짧은 "@그림n" 만 넣고, Claude 가 그 이름의 파일을 읽으려는 순간(prompt.mention)
-//   진짜 그림 파일로 바꿔 읽게 한다. 입력칸에 경로가 안 보인다.
+// 그림이 복사되면 미리 저장 → 입력창 위에 "image ready [Paste(Alt+V)] [View(Alt+I)]"
+// → 붙이면 입력칸 커서 위치에 "@<저장된 PNG 경로> " 를 넣는다. Claude Code 가 평범한 "@파일" 언급으로 읽어 첨부한다.
 // 원래 Alt+V(Claude 기본 붙여넣기)는 붙일 때마다 PowerShell 을 새로 띄워 이 PC에서 약 7초 걸린다(2026-10-20 감시 기록).
-// ※ 보낼 때(prompt.submit) 글을 경로로 바꾸는 방식은 실패했다: 첨부는 입력칸 글 기준이라 늦었다(2026-10-20 대화 기록 실측, 0장).
-//   그래서 글은 "@그림n" 그대로 두고, 파일을 읽는 단계에서 경로만 바꾼다
+// ※ 0.2.x 까지는 "@imageN" 별명을 넣고 prompt.mention 에서 경로로 바꿨다. 플러그인 디렉터리가 그 이벤트를 아직 모르는
+//   것으로 막아서(2026-10-23 포털 Validate), 0.3.0 부터 경로를 그대로 넣는다. 경로가 짧게 보이도록 감시가 ~/.cfp 밑에 저장한다
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Chip, ReadyImage } from '../types'
-import { KEEP_COPIED, WATCH_SCRIPT, chipOfMention, chipsText, decorationsFor, encodePs, findChips, keepListPath, missingChips, parseLine, pickRequestPath, splitLines, viewRequestPath } from './core'
+import type { ReadyImage } from '../types'
+import { KEEP_COPIED, WATCH_SCRIPT, encodePs, keepListPath, missingImages, parseLine, pathsText, pickRequestPath, splitLines, viewRequestPath } from './core'
 
 const ready = atom({ plugin: 'fast-paste-win', key: 'ready' } as const, null)
 const pasted = atom({ plugin: 'fast-paste-win', key: 'pasted' } as const, [] as ReadyImage[])
 const copied = atom({ plugin: 'fast-paste-win', key: 'copied' } as const, [] as ReadyImage[])
 const recent = atom({ plugin: 'fast-paste-win', key: 'recent' } as const, [] as ReadyImage[])
-const chips = atom({ plugin: 'fast-paste-win', key: 'chips' } as const, [] as Chip[])
 
-// [보기]: 감시 PowerShell 에 "이 그림 보여 줘" 쪽지(view.req)를 남긴다 → 그 PowerShell 이 0.25초 안에 창을 띄운다.
-// VS Code 탭(실측 34초)·사진 앱(새 프로그램이라 수 초)보다 빠르게 하려고, 이미 떠 있는 프로세스에 맡긴다(2026-10-20 실측)
+// [View]: 감시 PowerShell 에 "이 그림 보여 줘" 쪽지(view.req)를 남긴다 → 그 PowerShell 이 0.25초 안에 창을 띄운다.
 // 쪽지 한 줄에 그림 하나: 한 장이면 크게, 여러 장이면 감시가 한 창에 모아 보여 준다
 async function view($: EngineInterface, paths: string[]): Promise<void> {
   const first = paths[0]
@@ -51,13 +48,13 @@ async function watch($: EngineInterface): Promise<void> {
       rest = out.rest
       for (const line of out.lines) {
         const w = parseLine(line)
-        // 상태줄에도 같이 알린다: 띠가 접혀 있거나 가려져도 "준비됨"이 보이게(띠가 안 보인다는 신고를 가르려고 2026-10-20 추가)
         if (w.kind === 'image') {
           await update($, ready, () => ({ path: w.path }))
-          // 복사한 그림 목록에도 더한다. 감시가 붙이지 않은 그림은 KEEP_COPIED 장만 남기므로 목록도 그만큼만 둔다(지워진 파일을 가리키지 않게)
+          // 복사한 그림 목록에도 더한다. 감시가 붙이지 않은 그림은 KEEP_COPIED 장만 남기므로 목록도 그만큼만 둔다
           await update($, copied, list => [...list.filter(p => p.path !== w.path), { path: w.path }].slice(-KEEP_COPIED))
-          // 골라 붙이기용: 보내도 비우지 않는 최근 복사 목록(2026-10-22: 보낸 뒤 비웠더니 18장 중 9장만 보여 사용자가 지적)
+          // 골라 붙이기용: 보내도 비우지 않는 최근 복사 목록
           await update($, recent, list => [...list.filter(p => p.path !== w.path), { path: w.path }].slice(-KEEP_COPIED))
+          // 상태줄에도 알린다: 띠가 접혀 있거나 가려져도 "준비됨"이 보이게
           $.ui.status('🖼 image ready · Alt+V')
         } else if (w.kind === 'pick') {
           await pasteMany($, w.paths)
@@ -73,20 +70,17 @@ async function watch($: EngineInterface): Promise<void> {
   }
 }
 
-// 그림 여러 장을 입력칸 커서 위치에 "@그림n @그림n+1 …" 으로 한 번에 넣고(n = 입력칸에 이미 있는 그림 수 + 1),
-// 이름↔파일을 대응표에 적는다. 넣었으면 이번 메시지 목록에 더하고, "복사한 그림" 목록에서 빼고(같은 그림 두 번 방지),
-// 준비된 그림이 그중에 있으면 준비 상태도 비운다. 보낼 때까지 지우지 말라고 감시에 알린다(keep.txt)
+// 그림 여러 장을 입력칸 커서 위치에 "@경로 @경로 …" 로 한 번에 넣는다. 넣었으면 이번 메시지 목록에 더하고,
+// "복사한 그림" 목록에서 빼고(같은 그림 두 번 방지), 준비된 그림이 그중에 있으면 준비 상태도 비운다.
+// 보낼 때까지 지우지 말라고 감시에 알린다(keep.txt)
 async function pasteMany($: EngineInterface, paths: string[]): Promise<void> {
   const first = paths[0]
   if (first === undefined) return
-  const before = await $.prompt.read().then(b => findChips(b.text).length).catch(() => 0)
-  const { text, names } = chipsText(before, paths.length)
-  const res = await $.prompt.fill({ text, mode: 'insert', decorations: decorationsFor(text) as never })
+  const res = await $.prompt.fill({ text: pathsText(paths), mode: 'insert' })
   if (!res.isFilled) {
     $.ui.toast('Could not insert into the prompt')
     return
   }
-  const added = paths.map((path, i) => ({ name: names[i] ?? '', path }))
   const r = await read($, ready)
   if (r && paths.includes(r.path)) {
     $.ui.status(undefined)
@@ -94,7 +88,6 @@ async function pasteMany($: EngineInterface, paths: string[]): Promise<void> {
   }
   const list = await update($, pasted, list => [...list, ...paths.map(path => ({ path }))])
   await update($, copied, list => list.filter(p => !paths.includes(p.path)))
-  await update($, chips, list => [...list.filter(c => !names.includes(c.name)), ...added])
   await saveKeep($, list.map(p => p.path), first)
 }
 
@@ -121,47 +114,27 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
     // 다시 불러오기(/reload-plugins)에도 상태는 남는데, 새 감시가 시작하며 옛 그림 파일을 지운다.
-    // 남은 상태가 없는 파일을 가리켜 붙이기·보기가 헛도는 일을 막으려고 비운다(2026-10-20 실제 발생)
+    // 남은 상태가 없는 파일을 가리켜 붙이기·보기가 헛도는 일을 막으려고 비운다
     await update($, ready, () => null)
     await update($, pasted, () => [])
     await update($, copied, () => [])
     await update($, recent, () => [])
-    await update($, chips, () => [])
     void watch($)
     return started
   })
 
-  // Claude 가 "@그림n" 을 읽으려는 순간: 대응표에서 진짜 그림 파일을 찾아 그 파일을 대신 읽게 한다.
-  // 대응표에 없는 이름이면 손대지 않는다(그냥 "그림n" 이라는 파일을 찾다가 없으면 첨부 안 됨)
-  on('prompt.mention', async ($, e, next) => {
-    const name = chipOfMention(e.mention)
-    if (!name) return next(e)
-    const hit = (await read($, chips)).find(c => c.name === name)
-    return hit ? next({ ...e, path: hit.path }) : next(e)
-  })
-
-  // 입력칸을 고칠 때마다 꾸미기를 다시 칠한다(엔진은 다음 편집 때 꾸미기를 지우므로). 번호는 입력칸 안 순서대로 매긴다
-  on('prompt.edit', async ($, e, next) => {
-    const r = await next(e)
-    const mine = decorationsFor(r.text)
-    if (mine.length === 0) return r
-    return { ...r, decorations: [...(r.decorations ?? []), ...(mine as never[])] }
-  })
-
-  // 보내기 직전: 글 속 "@그림n" 중 파일을 못 찾는 게 있으면 알림을 띄우고, Claude 에게도 빠졌다고 알려 사용자에게 말하게 한다
-  //   (막지는 않는다: 보내기를 취소하면 입력한 글이 사라질 수 있어서. 예전엔 빠져도 아무 표시가 없었다 — 2026-10-21 36장 중 26장 누락)
-  // 보낸 뒤: "이번 메시지에 붙인 그림"·"복사한 그림"·"지우지 말 그림" 목록을 비운다(보낸 뒤까지 띠가 남지 않게,
-  //   다음 "모두 붙이기"에는 보낸 뒤 새로 복사한 그림만 들어가게)
+  // 보내기 직전: 글 속 그림 경로 중 파일이 없는 게 있으면 알림을 띄우고, Claude 에게도 빠졌다고 알려 사용자에게 말하게 한다
+  //   (막지는 않는다: 보내기를 취소하면 입력한 글이 사라질 수 있어서)
+  // 보낸 뒤: "이번 메시지에 붙인 그림"·"복사한 그림"·"지우지 말 그림" 목록을 비운다
   on('prompt.submit', async ($, e, next) => {
     let ev = e
-    if (!e.command && findChips(e.text).length > 0) {
-      const map = await read($, chips)
+    if (!e.command) {
       const ok = new Set<string>()
-      for (const c of map) if (await $.fs.exists(c.path).catch(() => false)) ok.add(c.path)
-      const miss = missingChips(e.text, map, p => ok.has(p))
+      for (const p of missingImages(e.text, () => false)) if (await $.fs.exists(p).catch(() => false)) ok.add(p)
+      const miss = missingImages(e.text, p => ok.has(p))
       if (miss.length > 0) {
-        $.ui.toast(`${miss.length} image(s) not found and dropped: ${miss.join(', ')}`)
-        const note = `(fast-paste-win notice) The user pasted ${miss.join(', ')} but those image files could not be found, so they are not attached. Tell the user at the start of your reply that these images are missing.`
+        $.ui.toast(`${miss.length} image(s) not found and dropped`)
+        const note = `(fast-paste-win notice) The user pasted ${miss.length} image path(s) that no longer exist (${miss.join(', ')}), so they are not attached. Tell the user at the start of your reply that these images are missing.`
         ev = { ...e, context: [...(e.context ?? []), note] }
       }
     }
@@ -173,13 +146,10 @@ export const register: Register = on => {
     return sent
   })
 
-  // 입력창 위 띠(한 줄): 버튼은 전부 단축키로도 누른다(2026-10-22 사용자 요청: 한 줄로, 모든 버튼 단축키)
-  //   보낸 뒤 복사한 그림이 2장 이상이면 "복사한 그림 N장 [모두 붙이기(Alt+A)]" — 보낸 뒤 새로 복사한 것만(이미 보낸 그림이 또 들어가지 않게)
-  //   최근 복사한 그림이 2장 이상이면 [골라 붙이기(Alt+G)] — 보낸 것과 상관없이 최근 KEEP_COPIED 장 전부에서 고른다
-  //     — Snipaste 등에서 캡처마다 복사해 둔 그림을 한 번에 넣는다(2026-10-21 사용자 요청: 30장 정도를 한 번에)
-  //   붙인 그림이 있으면 "붙인 그림 N장" (번호 버튼은 단축키를 줄 수 없어 뺐다. 낱장은 보기(Alt+I) 창에서 숫자 키로 연다)
-  //   준비된 그림이 있으면 [붙이기(Alt+V)], 볼 그림이 있으면 [보기(Alt+I)]
-  //   보기(Alt+I)는 이번 메시지에 붙인 그림이 있으면 전부를 한 창에(2장 이상이면 "모두 보기"), 없으면 준비된 그림을 연다
+  // 입력창 위 띠(한 줄): 버튼은 전부 단축키로도 누른다
+  //   보낸 뒤 복사한 그림이 2장 이상이면 "N copied [Paste all(Alt+A)]" — 보낸 뒤 새로 복사한 것만
+  //   최근 복사한 그림이 2장 이상이면 [Pick(Alt+G)] — 보낸 것과 상관없이 최근 KEEP_COPIED 장 전부에서 고른다
+  //   붙인 그림이 있으면 "N pasted", 준비된 그림이 있으면 [Paste(Alt+V)], 볼 그림이 있으면 [View(Alt+I)]
   // 버튼이 화면에 있어야 단축키가 이 모드로 온다(띠가 접혀 있으면 단축키도 안 먹음)
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const r = await read($, ready)
