@@ -5,6 +5,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Changed
+- README: "Notes for reviewers" section listing every engine call the mod makes, what it starts, writes and sends, so the directory's policy holds have their answer in the plugin itself.
+- Removed `scripts/make_icon.ps1` from the repository: the directory holds any script file that nothing in the plugin runs. The icon is already generated; the script stays in git history.
+
 ## [0.2.0] - 2026-10-23
 
 First public release, prepared for the Claude plugin directory.

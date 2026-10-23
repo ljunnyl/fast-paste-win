@@ -69,6 +69,17 @@ This section describes everything the plugin executes, so you can decide whether
 
 Screenshots may contain sensitive information. The `.cfp` folder is in your user profile; keep it out of cloud-sync or shared folders.
 
+## Notes for reviewers: every call the mod makes
+
+- `$.process.spawn` (hooks/register.tsx, `watch`): starts exactly one program, `powershell.exe`, with the fixed arguments `-NoProfile -NonInteractive -Sta -EncodedCommand <base64>`. The base64 is `encodePs(WATCH_SCRIPT)`: the plain-text script in `hooks/core.ts` encoded as UTF-16LE. No shell, no network tool, no package launcher. Nothing else is ever started.
+- `$.fs.write` (`view`, `pick`, `saveKeep`): writes three request files, always in the watcher's own folder `%USERPROFILE%\.cfp\<pid>\`, always with the fixed names `view.req` (images to show), `pick.req` (images to offer in the picker) and `keep.txt` (images not to delete yet). Only the watcher script above reads them, and it deletes `view.req` and `pick.req` right after reading. No build, settings or instructions file is written.
+- `$.fs.exists`: checks that a pasted PNG still exists before the message is sent.
+- `$.prompt.read` / `$.prompt.fill`: reads the prompt text to count existing `@imageN` names, and inserts the next names at the cursor. The user sees exactly what is inserted.
+- `prompt.mention` hook: when Claude is about to read `@imageN`, the hook swaps in the path of the saved PNG. Any other mention passes through unchanged.
+- `prompt.submit` hook: reads the prompt text only to find `@imageN` names whose file is gone, shows a toast, and adds one plain-text note to the context so Claude tells the user which images are missing. It never blocks or rewrites the message.
+- `prompt.edit` and `ui.render`: cosmetic only (brackets around `@imageN`, the band above the prompt).
+- Data leaving the mod: nothing goes anywhere but into the user's own prompt (the inserted text and the missing-image note). There are no HTTP calls, no `$.model` calls, no reads of the conversation beyond the prompt being typed.
+
 ## Requirements
 
 - Windows 10 or 11 with Windows PowerShell 5 (preinstalled).
@@ -82,7 +93,7 @@ claude plugin validate .
 claude plugin test .
 ```
 
-`hooks/core.ts` holds the watcher script and pure helpers (line parsing, name substitution, prompt decorations). `hooks/register.tsx` holds the session, prompt and render hooks. Tests are in `hooks/*.test.ts(x)`. `scripts/make_icon.ps1` regenerates the icon.
+`hooks/core.ts` holds the watcher script and pure helpers (line parsing, name substitution, prompt decorations). `hooks/register.tsx` holds the session, prompt and render hooks. Tests are in `hooks/*.test.ts(x)`.
 
 ## 한국어
 
