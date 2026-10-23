@@ -1,0 +1,15 @@
+{
+  "name": "ljunnyl-mods",
+  "description": "Claude Code mods by ljunnyl",
+  "owner": {
+    "name": "ljunnyl",
+    "url": "https://github.com/ljunnyl"
+  },
+  "plugins": [
+    {
+      "name": "fast-paste-win",
+      "source": "./",
+      "description": "Instant clipboard-image paste for Claude Code on Windows"
+    }
+  ]
+}

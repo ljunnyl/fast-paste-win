@@ -1,0 +1,102 @@
+# Fast Paste for Windows
+
+**Instant clipboard-image paste for Claude Code on Windows.** Take a screenshot, press Alt+V, and the image is attached to your prompt immediately. No multi-second pause, no file paths cluttering the input box.
+
+Windows only. Works with any tool that puts an image on the clipboard: Win+Shift+S, PrintScreen, Snipaste, ShareX, Paint, a browser, Excel.
+
+한국어 안내는 아래 [한국어](#한국어) 절에 있습니다.
+
+## Why
+
+Claude Code's built-in image paste (Alt+V) launches a new PowerShell process every time you paste. On a corporate laptop with endpoint security that can take 5 to 7 seconds per image. This plugin keeps **one** PowerShell process alive for the whole session, watches the clipboard, and saves each new image to disk ahead of time. Pasting is then just inserting a short name into the prompt.
+
+## What you get
+
+A one-line band appears above the prompt whenever there is something to paste. Every button also has a shortcut.
+
+| Button | Shortcut | What it does |
+| --- | --- | --- |
+| Paste | Alt+V | Insert the image you just copied |
+| View / View all | Alt+I | Open the pasted image(s) in a window: ←/→ to move, number keys to enlarge one, Esc to close |
+| Paste all | Alt+A | Insert every image copied since your last message, in order |
+| Pick | Alt+G | Open a gallery of recent copies (up to 40), tick the ones you want, Enter to paste |
+
+Pasted images show in the prompt as `[@image1]`, `[@image2]` and so on. When you send the message, Claude reads the real PNG files. If a file has gone missing before sending, you get a toast and Claude is told which images were dropped.
+
+![icon](.claude-plugin/icon.png)
+
+## Install
+
+```
+/plugin install fast-paste-win --marketplace ljunnyl/fast-paste-win
+```
+
+Answer `y` to add the marketplace, then pick a scope.
+
+### Register the shortcuts (required, once)
+
+A mod cannot define new key bindings, so this plugin borrows four engine actions that are otherwise unused in the chat view. After installing, say **"set up fast-paste"** and the bundled `fast-paste-setup` skill writes the bindings for you, or add them yourself to `~/.claude/keybindings.json`:
+
+```json
+{
+  "bindings": [
+    { "context": "Chat", "bindings": { "alt+v": null, "alt+shift+v": "chat:imagePaste" } },
+    {
+      "context": "Global",
+      "bindings": {
+        "alt+v": "app:toggleReplTab",
+        "alt+i": "app:toggleDiffPreSession",
+        "alt+a": "app:cycleDiffBase",
+        "alt+g": "app:diffFileListDown"
+      }
+    }
+  ]
+}
+```
+
+The built-in image paste moves to **Alt+Shift+V**. Restart Claude Code after editing the file.
+
+## What the plugin runs and stores
+
+This section describes everything the plugin executes, so you can decide whether it is right for your machine.
+
+- **One process:** on session start the plugin spawns `powershell.exe -NoProfile -NonInteractive -Sta -EncodedCommand <script>`. The script is embedded in `hooks/core.ts` as readable text (`WATCH_SCRIPT`); the encoded form is just UTF-16 base64 of that text so quoting is not an issue. It uses only built-in Windows components: `System.Windows.Forms`, `System.Drawing`, and two `user32.dll` calls (`GetClipboardSequenceNumber`, `ShowWindow`/`SetForegroundWindow` to bring the viewer window to the front).
+- **What it watches:** the clipboard change counter, four times a second. When the counter changes and the clipboard holds an image, the image is saved as PNG. Text and other clipboard contents are never read or stored.
+- **Where files go:** `%USERPROFILE%\.cfp\<pid>\N.png`, one folder per session. Images that were copied but not pasted are trimmed to the most recent 40. Images pasted into the prompt are kept until the message is sent, then released. On start, the plugin deletes folders left by sessions whose process no longer exists, and ignores whatever was already on the clipboard.
+- **Small request files** in the same folder (`view.req`, `pick.req`, `keep.txt`) carry instructions from the plugin to the watcher. They are deleted as soon as they are read.
+- **Nothing leaves your machine.** The plugin makes no network requests. Images reach Claude only through the normal prompt attachment, the same way as the built-in paste.
+- **Shutdown:** if Claude Code exits abnormally, the watcher's output pipe breaks and it exits itself within 10 seconds.
+
+Screenshots may contain sensitive information. The `.cfp` folder is in your user profile; keep it out of cloud-sync or shared folders.
+
+## Requirements
+
+- Windows 10 or 11 with Windows PowerShell 5 (preinstalled).
+- Claude Code with mod (hooks module) support.
+- macOS and Linux are not supported; the plugin shows a toast and does nothing.
+
+## Development
+
+```
+claude plugin validate .
+claude plugin test .
+```
+
+`hooks/core.ts` holds the watcher script and pure helpers (line parsing, name substitution, prompt decorations). `hooks/register.tsx` holds the session, prompt and render hooks. Tests are in `hooks/*.test.ts(x)`. `scripts/make_icon.ps1` regenerates the icon.
+
+## 한국어
+
+Claude Code 에서 화면 캡처를 **바로** 붙이는 윈도우 전용 플러그인입니다. 세션이 켜질 때 PowerShell 하나를 띄워 두고 클립보드를 지켜보다가, 그림이 복사되면 미리 PNG 로 저장해 둡니다. Alt+V 를 누르면 그 파일이 `[@image1]` 같은 짧은 이름으로 입력칸에 들어가고, 보낼 때 Claude 가 실제 파일을 읽습니다.
+
+기본 붙여넣기(Alt+V)는 누를 때마다 PowerShell 을 새로 띄워 보안 프로그램이 깔린 회사 PC 에서는 5~7초씩 걸립니다. 이 플러그인은 이미 떠 있는 프로세스가 저장해 둔 파일을 쓰므로 바로 붙습니다.
+
+| 버튼 | 단축키 | 동작 |
+| --- | --- | --- |
+| 붙이기 | Alt+V | 방금 복사한 그림 한 장을 넣는다 |
+| 보기 / 모두 보기 | Alt+I | 붙인 그림을 창으로 크게 본다 (←/→ 이동, 숫자 키 확대, Esc 닫기) |
+| 모두 붙이기 | Alt+A | 마지막 메시지 이후 복사한 그림 전부를 순서대로 넣는다 |
+| 골라 붙이기 | Alt+G | 최근 복사한 그림(최대 40장)을 체크해서 고른 것만 넣는다 |
+
+설치 뒤 "fast-paste 설정해줘" 라고 하면 같이 들어 있는 `fast-paste-setup` 스킬이 단축키 파일을 써 줍니다. 기본 붙여넣기는 Alt+Shift+V 로 옮겨집니다.
+
+그림은 `%USERPROFILE%\.cfp\<번호>\` 에 잠깐 저장됩니다. 복사만 한 그림은 최근 40장, 붙인 그림은 보낼 때까지만 남깁니다. 네트워크 요청은 없습니다. 캡처에 개인정보가 있을 수 있으니 이 폴더를 동기화하지 마세요.

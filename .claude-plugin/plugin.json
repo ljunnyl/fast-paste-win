@@ -1,0 +1,23 @@
+{
+  "name": "fast-paste-win",
+  "displayName": "Fast Paste for Windows",
+  "version": "0.2.0",
+  "description": "Instant clipboard-image paste for Claude Code on Windows. One background PowerShell watches the clipboard and saves screenshots ahead of time, so Alt+V attaches them with no delay. Paste one, paste all, or pick from a gallery.",
+  "author": {
+    "name": "ljunnyl",
+    "url": "https://github.com/ljunnyl"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/ljunnyl/fast-paste-win",
+  "repository": "https://github.com/ljunnyl/fast-paste-win",
+  "keywords": [
+    "windows",
+    "clipboard",
+    "screenshot",
+    "image",
+    "paste",
+    "mod"
+  ],
+  "icon": ".claude-plugin/icon.png",
+  "types": "./types/index.d.ts"
+}
