@@ -1,7 +1,7 @@
 // 감시 출력 해석·줄 나누기·입력칸 글·인코딩 시험 (가공 데이터만 사용)
 import { test, expect } from 'claude-code/testing'
 
-import { KEEP_COPIED, WATCH_SCRIPT, encodePs, findImageMentions, keepListPath, missingImages, parseLine, pathsText, pickRequestPath, splitLines, viewRequestPath } from './core'
+import { KEEP_COPIED, WATCH_SCRIPT, encodePs, findImageMentions, keepListPath, keyLabel, keyOf, keybindingsFor, missingImages, parseLine, pathsText, pickRequestPath, splitLines, viewRequestPath } from './core'
 
 test('감시 출력 한 줄을 뜻으로 바꾼다', () => {
   expect(parseLine('READY\r')).toEqual({ kind: 'ready' })
@@ -62,4 +62,16 @@ test('여러 장은 "@경로 " 를 이어 붙이고, 다시 찾으면 그대로 
   const text = pathsText(paths)
   expect(text.startsWith(`@${paths[0]} @${paths[1]} `)).toBe(true)
   expect(findImageMentions(text)).toEqual(paths)
+})
+
+test('단축키 설정: 비면 기본값, 표시는 Alt+V 꼴, keybindings 조각은 alt+v 겹침 때만 Chat 항목을 넣는다', () => {
+  expect(keyOf({}, 'pasteKey')).toBe('alt+v')
+  expect(keyOf({ pasteKey: ' Alt+P ' }, 'pasteKey')).toBe('alt+p')
+  expect(keyLabel('ctrl+shift+i')).toBe('Ctrl+Shift+I')
+  const def = keybindingsFor({ pasteKey: 'alt+v', viewKey: 'alt+i', pasteAllKey: 'alt+a', pickKey: 'alt+g' })
+  expect(def.bindings[0]).toEqual({ context: 'Chat', bindings: { 'alt+v': null, 'alt+shift+v': 'chat:imagePaste' } })
+  expect(def.bindings[1]?.bindings['alt+g']).toBe('app:diffFileListDown')
+  const moved = keybindingsFor({ pasteKey: 'alt+p', viewKey: 'alt+i', pasteAllKey: 'alt+a', pickKey: 'alt+g' })
+  expect(moved.bindings.length).toBe(1)
+  expect(moved.bindings[0]?.bindings['alt+p']).toBe('app:toggleReplTab')
 })

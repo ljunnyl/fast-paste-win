@@ -33,9 +33,13 @@ Pasted images show in the prompt as `@C:\Users\you\.cfp\12345\1.png` and so on: 
 
 Answer `y` to add the marketplace, then pick a scope.
 
+### Choose your shortcuts (optional)
+
+The four keys are plugin settings (`Paste shortcut`, `View shortcut`, `Paste-all shortcut`, `Pick shortcut`), shown when you install and later under `/config` → plugin settings. Defaults are Alt+V, Alt+I, Alt+A, Alt+G. Use Claude Code key syntax such as `alt+p` or `ctrl+shift+i`, and avoid keys Claude Code already uses. After changing a key, run the setup skill below again so the binding file matches.
+
 ### Register the shortcuts (required, once)
 
-A mod cannot define new key bindings, so this plugin borrows four engine actions that are otherwise unused in the chat view. After installing, say **"set up fast-paste"** and the bundled `fast-paste-setup` skill writes the bindings for you, or add them yourself to `~/.claude/keybindings.json`:
+A mod cannot define new key bindings, so this plugin borrows four engine actions that are otherwise unused in the chat view. After installing, say **"set up fast-paste"** and the bundled `fast-paste-setup` skill reads your shortcut settings and writes the bindings for you. With the default keys the file it writes to `~/.claude/keybindings.json` is:
 
 ```json
 {

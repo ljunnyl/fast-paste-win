@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-23
+
+### Added
+- Shortcut settings: `pasteKey`, `viewKey`, `pasteAllKey`, `pickKey` in `userConfig` (defaults alt+v / alt+i / alt+a / alt+g). The band labels show the configured keys, and the `fast-paste-setup` skill writes `~/.claude/keybindings.json` from them, so users who already use Alt+V elsewhere can move the shortcuts without editing files by hand. The borrowed engine actions stay fixed.
+
 ## [0.3.0] - 2026-10-23
 
 ### Changed

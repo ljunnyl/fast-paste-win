@@ -8,12 +8,15 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { ReadyImage } from '../types'
-import { KEEP_COPIED, WATCH_SCRIPT, encodePs, keepListPath, missingImages, parseLine, pathsText, pickRequestPath, splitLines, viewRequestPath } from './core'
+import { KEEP_COPIED, KEY_ACTIONS, WATCH_SCRIPT, encodePs, keepListPath, keyLabel, keyOf, missingImages, parseLine, pathsText, pickRequestPath, splitLines, viewRequestPath } from './core'
 
 const ready = atom({ plugin: 'fast-paste-win', key: 'ready' } as const, null)
 const pasted = atom({ plugin: 'fast-paste-win', key: 'pasted' } as const, [] as ReadyImage[])
 const copied = atom({ plugin: 'fast-paste-win', key: 'copied' } as const, [] as ReadyImage[])
 const recent = atom({ plugin: 'fast-paste-win', key: 'recent' } as const, [] as ReadyImage[])
+
+// 상태줄 안내에 보일 붙이기 키 글자. register 가 설정값으로 바꿔 둔다(모듈 변수는 다시 불러올 때 초기화됨)
+let pasteKeyLabel = 'Alt+V'
 
 // [View]: 감시 PowerShell 에 "이 그림 보여 줘" 쪽지(view.req)를 남긴다 → 그 PowerShell 이 0.25초 안에 창을 띄운다.
 // 쪽지 한 줄에 그림 하나: 한 장이면 크게, 여러 장이면 감시가 한 창에 모아 보여 준다
@@ -55,7 +58,7 @@ async function watch($: EngineInterface): Promise<void> {
           // 골라 붙이기용: 보내도 비우지 않는 최근 복사 목록
           await update($, recent, list => [...list.filter(p => p.path !== w.path), { path: w.path }].slice(-KEEP_COPIED))
           // 상태줄에도 알린다: 띠가 접혀 있거나 가려져도 "준비됨"이 보이게
-          $.ui.status('🖼 image ready · Alt+V')
+          $.ui.status(`🖼 image ready · ${pasteKeyLabel}`)
         } else if (w.kind === 'pick') {
           await pasteMany($, w.paths)
         } else if (w.kind === 'noimage') {
@@ -109,7 +112,16 @@ async function pick($: EngineInterface, paths: string[]): Promise<void> {
   }
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  // 단축키 설정(userConfig). 띠 버튼의 글자에만 쓴다 — 실제 키는 fast-paste-setup 스킬이 keybindings.json 에 묶는다
+  const K = {
+    paste: keyLabel(keyOf(options, 'pasteKey')),
+    view: keyLabel(keyOf(options, 'viewKey')),
+    pasteAll: keyLabel(keyOf(options, 'pasteAllKey')),
+    pick: keyLabel(keyOf(options, 'pickKey')),
+  }
+  pasteKeyLabel = K.paste
+
   // 세션 시작: 감시를 백그라운드로 띄운다(끝날 때까지 기다리지 않음)
   on('session.start', async ($, e, next) => {
     const started = await next(e)
@@ -163,22 +175,21 @@ export const register: Register = on => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const cpPaths = cp.map(p => p.path)
     const rcPaths = rc.map(p => p.path)
-    // action: 모드는 새 단축키 동작을 못 만들어, 평소 화면에서 안 쓰는 엔진 동작을 빌리고 ~/.claude/keybindings.json 에서 키를 묶었다
-    //   Alt+V → app:toggleReplTab (기본 붙여넣기는 Alt+Shift+V 로 옮김) / Alt+I → app:toggleDiffPreSession
-    //   Alt+A → app:cycleDiffBase / Alt+G → app:diffFileListDown (둘 다 변경 비교 창 안에서만 쓰는 동작)
+    // action: 모드는 새 단축키 동작을 못 만들어, 평소 화면에서 안 쓰는 엔진 동작(KEY_ACTIONS)을 빌리고
+    //   사용자가 설정한 키를 ~/.claude/keybindings.json 에서 그 동작에 묶는다(fast-paste-setup 스킬). 글자(K)는 설정값을 보여 준다
     return (
       <Box justifyContent="flex-end">
         <Text dimColor>🖼 </Text>
         {many && <Text dimColor>{cp.length} copied </Text>}
-        {many && <Button key="paste-all" action="app:cycleDiffBase" label="Paste all (Alt+A)" onPress={() => pasteMany($, cpPaths)} />}
+        {many && <Button key="paste-all" action={KEY_ACTIONS.pasteAllKey} label={`Paste all (${K.pasteAll})`} onPress={() => pasteMany($, cpPaths)} />}
         {many && canPick && <Text> </Text>}
-        {canPick && <Button key="pick" action="app:diffFileListDown" label="Pick (Alt+G)" onPress={() => pick($, rcPaths)} />}
+        {canPick && <Button key="pick" action={KEY_ACTIONS.pickKey} label={`Pick (${K.pick})`} onPress={() => pick($, rcPaths)} />}
         {(many || canPick) && targets.length > 0 && <Text dimColor> · </Text>}
         {list.length > 0 && <Text dimColor>{list.length} pasted </Text>}
-        {r !== null && <Button key="paste" action="app:toggleReplTab" label="Paste (Alt+V)" onPress={() => paste($)} />}
+        {r !== null && <Button key="paste" action={KEY_ACTIONS.pasteKey} label={`Paste (${K.paste})`} onPress={() => paste($)} />}
         {r !== null && targets.length > 0 && <Text> </Text>}
         {targets.length > 0 && (
-          <Button key="view" action="app:toggleDiffPreSession" label={targets.length > 1 ? 'View all (Alt+I)' : 'View (Alt+I)'} onPress={() => view($, targets)} />
+          <Button key="view" action={KEY_ACTIONS.viewKey} label={targets.length > 1 ? `View all (${K.view})` : `View (${K.view})`} onPress={() => view($, targets)} />
         )}
       </Box>
     )

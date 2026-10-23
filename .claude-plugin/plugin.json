@@ -1,7 +1,7 @@
 {
   "name": "fast-paste-win",
   "displayName": "Fast Paste for Windows",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Instant clipboard-image paste for Claude Code on Windows. One background PowerShell watches the clipboard and saves screenshots ahead of time, so Alt+V attaches them with no delay. Paste one, paste all, or pick from a gallery.",
   "author": {
     "name": "ljunnyl",
@@ -19,5 +19,31 @@
     "mod"
   ],
   "icon": ".claude-plugin/icon.png",
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "pasteKey": {
+      "title": "Paste shortcut",
+      "description": "Key that pastes the image you just copied. Claude Code key syntax, e.g. alt+v. Run the fast-paste-setup skill after changing it.",
+      "type": "string",
+      "default": "alt+v"
+    },
+    "viewKey": {
+      "title": "View shortcut",
+      "description": "Key that opens the pasted image(s) in a window, e.g. alt+i.",
+      "type": "string",
+      "default": "alt+i"
+    },
+    "pasteAllKey": {
+      "title": "Paste-all shortcut",
+      "description": "Key that pastes every image copied since your last message, e.g. alt+a.",
+      "type": "string",
+      "default": "alt+a"
+    },
+    "pickKey": {
+      "title": "Pick shortcut",
+      "description": "Key that opens the gallery to pick images, e.g. alt+g.",
+      "type": "string",
+      "default": "alt+g"
+    }
+  }
 }

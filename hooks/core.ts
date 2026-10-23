@@ -236,3 +236,40 @@ export function findImageMentions(text: string): string[] {
 export function missingImages(text: string, exists: (path: string) => boolean): string[] {
   return findImageMentions(text).filter(p => !exists(p))
 }
+
+// 단축키 설정(plugin.json userConfig). 모드는 키를 직접 묶을 수 없어 엔진의 안 쓰는 동작 4개를 빌리고,
+// 사용자가 고른 키를 ~/.claude/keybindings.json 에서 그 동작에 묶는다(fast-paste-setup 스킬이 써 준다).
+// 여기서는 띠 버튼에 보여 줄 키 이름과, 스킬이 쓸 keybindings 조각을 만든다
+export const KEY_DEFAULTS = { pasteKey: 'alt+v', viewKey: 'alt+i', pasteAllKey: 'alt+a', pickKey: 'alt+g' } as const
+export type KeyField = keyof typeof KEY_DEFAULTS
+// 빌리는 엔진 동작: 평소 채팅 화면에서 안 쓰는 것들(변경 비교 창·REPL 탭용)
+export const KEY_ACTIONS: Record<KeyField, string> = {
+  pasteKey: 'app:toggleReplTab',
+  viewKey: 'app:toggleDiffPreSession',
+  pasteAllKey: 'app:cycleDiffBase',
+  pickKey: 'app:diffFileListDown',
+}
+
+// 설정값에서 키 하나를 꺼낸다: 비었거나 문자열이 아니면 기본값, 공백 제거·소문자
+export function keyOf(options: Readonly<Record<string, unknown>>, field: KeyField): string {
+  const v = options[field]
+  const s = typeof v === 'string' ? v.trim().toLowerCase() : ''
+  return s || KEY_DEFAULTS[field]
+}
+
+// 띠 버튼에 보일 모양: "alt+v" → "Alt+V", "ctrl+shift+p" → "Ctrl+Shift+P"
+export function keyLabel(key: string): string {
+  return key.split('+').map(p => (p.length === 1 ? p.toUpperCase() : p.charAt(0).toUpperCase() + p.slice(1))).join('+')
+}
+
+// ~/.claude/keybindings.json 에 넣을 조각. 붙이기 키가 Claude 기본 그림 붙여넣기(alt+v)와 겹치면
+// 채팅 문맥에서 그 키를 비우고 기본 붙여넣기는 alt+shift+v 로 옮긴다
+export function keybindingsFor(keys: Record<KeyField, string>): { bindings: { context: string; bindings: Record<string, string | null> }[] } {
+  const global: Record<string, string> = {}
+  for (const f of Object.keys(KEY_ACTIONS) as KeyField[]) global[keys[f]] = KEY_ACTIONS[f]
+  const out: { context: string; bindings: Record<string, string | null> }[] = []
+  if (Object.values(keys).includes('alt+v')) out.push({ context: 'Chat', bindings: { 'alt+v': null, 'alt+shift+v': 'chat:imagePaste' } })
+  out.push({ context: 'Global', bindings: global })
+  return { bindings: out }
+}
+
