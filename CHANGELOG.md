@@ -5,7 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-23
+
 ### Changed
+- Pasting now inserts the saved PNG's `@path` directly instead of an `@imageN` alias. The alias needed a `prompt.mention` hook, which the Claude plugin directory does not yet list as a known event and therefore blocks. Direct paths use Claude Code's ordinary file mention, so nothing custom runs at read time. Trade-off: paths are visible in the prompt (kept short via `~/.cfp`).
+- Removed the `prompt.mention` and `prompt.edit` hooks and the `chips` state; the missing-image check now looks for `.cfp` PNG mentions in the prompt text.
 - README: "Notes for reviewers" section listing every engine call the mod makes, what it starts, writes and sends, so the directory's policy holds have their answer in the plugin itself.
 - Removed `scripts/make_icon.ps1` from the repository: the directory holds any script file that nothing in the plugin runs. The icon is already generated; the script stays in git history.
 

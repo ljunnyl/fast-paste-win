@@ -1,6 +1,6 @@
 # Fast Paste for Windows
 
-**Instant clipboard-image paste for Claude Code on Windows.** Take a screenshot, press Alt+V, and the image is attached to your prompt immediately. No multi-second pause, no file paths cluttering the input box.
+**Instant clipboard-image paste for Claude Code on Windows.** Take a screenshot, press Alt+V, and the image is attached to your prompt immediately. No multi-second pause.
 
 Windows only. Works with any tool that puts an image on the clipboard: Win+Shift+S, PrintScreen, Snipaste, ShareX, Paint, a browser, Excel.
 
@@ -8,7 +8,7 @@ Windows only. Works with any tool that puts an image on the clipboard: Win+Shift
 
 ## Why
 
-Claude Code's built-in image paste (Alt+V) launches a new PowerShell process every time you paste. On a corporate laptop with endpoint security that can take 5 to 7 seconds per image. This plugin keeps **one** PowerShell process alive for the whole session, watches the clipboard, and saves each new image to disk ahead of time. Pasting is then just inserting a short name into the prompt.
+Claude Code's built-in image paste (Alt+V) launches a new PowerShell process every time you paste. On a corporate laptop with endpoint security that can take 5 to 7 seconds per image. This plugin keeps **one** PowerShell process alive for the whole session, watches the clipboard, and saves each new image to disk ahead of time. Pasting is then just inserting the saved file's `@path` into the prompt, which Claude Code attaches like any other mentioned file.
 
 ## What you get
 
@@ -21,7 +21,7 @@ A one-line band appears above the prompt whenever there is something to paste. E
 | Paste all | Alt+A | Insert every image copied since your last message, in order |
 | Pick | Alt+G | Open a gallery of recent copies (up to 40), tick the ones you want, Enter to paste |
 
-Pasted images show in the prompt as `[@image1]`, `[@image2]` and so on. When you send the message, Claude reads the real PNG files. If a file has gone missing before sending, you get a toast and Claude is told which images were dropped.
+Pasted images show in the prompt as `@C:\Users\you\.cfp\12345\1.png` and so on: short on purpose, because the watcher saves under `~/.cfp`. When you send the message, Claude Code reads those PNG files. If a file has gone missing before sending, you get a toast and Claude is told which images were dropped.
 
 ![icon](.claude-plugin/icon.png)
 
@@ -74,10 +74,9 @@ Screenshots may contain sensitive information. The `.cfp` folder is in your user
 - `$.process.spawn` (hooks/register.tsx, `watch`): starts exactly one program, `powershell.exe`, with the fixed arguments `-NoProfile -NonInteractive -Sta -EncodedCommand <base64>`. The base64 is `encodePs(WATCH_SCRIPT)`: the plain-text script in `hooks/core.ts` encoded as UTF-16LE. No shell, no network tool, no package launcher. Nothing else is ever started.
 - `$.fs.write` (`view`, `pick`, `saveKeep`): writes three request files, always in the watcher's own folder `%USERPROFILE%\.cfp\<pid>\`, always with the fixed names `view.req` (images to show), `pick.req` (images to offer in the picker) and `keep.txt` (images not to delete yet). Only the watcher script above reads them, and it deletes `view.req` and `pick.req` right after reading. No build, settings or instructions file is written.
 - `$.fs.exists`: checks that a pasted PNG still exists before the message is sent.
-- `$.prompt.read` / `$.prompt.fill`: reads the prompt text to count existing `@imageN` names, and inserts the next names at the cursor. The user sees exactly what is inserted.
-- `prompt.mention` hook: when Claude is about to read `@imageN`, the hook swaps in the path of the saved PNG. Any other mention passes through unchanged.
-- `prompt.submit` hook: reads the prompt text only to find `@imageN` names whose file is gone, shows a toast, and adds one plain-text note to the context so Claude tells the user which images are missing. It never blocks or rewrites the message.
-- `prompt.edit` and `ui.render`: cosmetic only (brackets around `@imageN`, the band above the prompt).
+- `$.prompt.fill`: inserts `@<saved PNG path> ` at the cursor. The user sees exactly what is inserted, and Claude Code attaches the file through its normal `@file` mention. No hook touches how the file is read.
+- `prompt.submit` hook: reads the prompt text only to find `@…\.cfp\<pid>\<n>.png` mentions whose file is gone, shows a toast, and adds one plain-text note to the context so Claude tells the user which images are missing. It never blocks or rewrites the message.
+- `ui.render`: the band above the prompt.
 - Data leaving the mod: nothing goes anywhere but into the user's own prompt (the inserted text and the missing-image note). There are no HTTP calls, no `$.model` calls, no reads of the conversation beyond the prompt being typed.
 
 ## Requirements
@@ -93,11 +92,11 @@ claude plugin validate .
 claude plugin test .
 ```
 
-`hooks/core.ts` holds the watcher script and pure helpers (line parsing, name substitution, prompt decorations). `hooks/register.tsx` holds the session, prompt and render hooks. Tests are in `hooks/*.test.ts(x)`.
+`hooks/core.ts` holds the watcher script and pure helpers (line parsing, name substitution, prompt decorations). `hooks/register.tsx` holds the session, submit and render hooks. Tests are in `hooks/*.test.ts(x)`.
 
 ## 한국어
 
-Claude Code 에서 화면 캡처를 **바로** 붙이는 윈도우 전용 플러그인입니다. 세션이 켜질 때 PowerShell 하나를 띄워 두고 클립보드를 지켜보다가, 그림이 복사되면 미리 PNG 로 저장해 둡니다. Alt+V 를 누르면 그 파일이 `[@image1]` 같은 짧은 이름으로 입력칸에 들어가고, 보낼 때 Claude 가 실제 파일을 읽습니다.
+Claude Code 에서 화면 캡처를 **바로** 붙이는 윈도우 전용 플러그인입니다. 세션이 켜질 때 PowerShell 하나를 띄워 두고 클립보드를 지켜보다가, 그림이 복사되면 미리 PNG 로 저장해 둡니다. Alt+V 를 누르면 그 파일 경로가 `@C:\Users\나\.cfp\12345\1.png` 처럼 입력칸에 들어가고, Claude Code 가 평범한 파일 언급으로 읽어 첨부합니다.
 
 기본 붙여넣기(Alt+V)는 누를 때마다 PowerShell 을 새로 띄워 보안 프로그램이 깔린 회사 PC 에서는 5~7초씩 걸립니다. 이 플러그인은 이미 떠 있는 프로세스가 저장해 둔 파일을 쓰므로 바로 붙습니다.
 
