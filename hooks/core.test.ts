@@ -1,7 +1,7 @@
 // 감시 출력 해석·줄 나누기·입력칸 글·인코딩 시험 (가공 데이터만 사용)
 import { test, expect } from 'claude-code/testing'
 
-import { KEEP_COPIED, WATCH_SCRIPT, encodePs, findImageMentions, keepListPath, keyLabel, keyOf, keybindingsFor, missingImages, parseLine, pathsText, pickRequestPath, splitLines, viewRequestPath } from './core'
+import { KEEP_COPIED, PS_PARSE_RANGE, WATCH_SCRIPT, encodePs, findImageMentions, keepListPath, keyLabel, keyOf, keybindingsFor, missingImages, parseLine, pathsText, pickRequestPath, splitLines, viewRequestPath } from './core'
 
 test('감시 출력 한 줄을 뜻으로 바꾼다', () => {
   expect(parseLine('READY\r')).toEqual({ kind: 'ready' })
@@ -55,6 +55,17 @@ test('골라 붙이기 결과 PICK 줄을 경로 목록으로 바꾼다(취소�
   expect(parseLine('PICK C:/a/1.png|C:/a/3.png\r')).toEqual({ kind: 'pick', paths: ['C:/a/1.png', 'C:/a/3.png'] })
   expect(parseLine('PICK ')).toEqual({ kind: 'pick', paths: [] })
   expect(pickRequestPath('C:/a/1.png')).toBe('C:/a/pick.req')
+})
+
+// Range 칸 해석기(Parse-Range)의 동작은 PowerShell 에서만 돌릴 수 있어 여기서는 감시 스크립트에 실렸는지와 Shift 범위 선택 코드가 있는지만 본다.
+// 실제 값 확인(8가지 경우)은 2026-10-26 PowerShell 로 직접 실행해 전부 통과 — CHANGELOG 0.5.0 참조
+test('골라 붙이기 창에 Range 해석기와 Shift 범위 선택이 실린다', () => {
+  const script = WATCH_SCRIPT
+  expect(PS_PARSE_RANGE[0]).toBe('function Parse-Range($text, $n) {')
+  for (const line of PS_PARSE_RANGE) expect(script).toContain(line)
+  expect(script).toContain('Parse-Range $rng.Text $checks.Count')
+  expect(script).toContain('[System.Windows.Forms.Keys]::Shift')
+  expect(script).toContain('Shift+click: range')
 })
 
 test('여러 장은 "@경로 " 를 이어 붙이고, 다시 찾으면 그대로 나온다', () => {

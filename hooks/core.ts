@@ -13,6 +13,25 @@
 // 10 → 40 으로 올렸다(2026-10-21 사용자 요청: 30장 정도). 개인정보 노출 기간과 맞바꾼 값이라 필요 이상 올리지 않는다
 export const KEEP_COPIED = 40
 
+// 골라 붙이기 창의 Range 칸 해석기(PowerShell). "1-20,25" 처럼 쉼표·공백으로 나눈 조각마다 숫자 하나 또는 "a-b" 범위를 받아
+// 0부터 세는 번호 목록(중복 없이 오름차순)으로 돌려준다. 거꾸로 적은 범위("20-1")는 뒤집고, 1 미만·n 초과는 잘라 내며,
+// 못 읽는 조각("1-", "abc")은 조용히 건너뛴다 — 타이핑 도중("1-2" → "1-20")에도 매번 다시 계산하므로 오류를 띄우지 않는다.
+// 감시 스크립트 안에 들어가지만 따로 두어 테스트가 이 함수만 PowerShell 로 돌려 볼 수 있게 했다
+export const PS_PARSE_RANGE = [
+  'function Parse-Range($text, $n) {',
+  '  $out = @{}',
+  "  foreach ($tok in ([string]$text -split '[,\\s]+')) {",
+  "    if ($tok -match '^(\\d+)$') { $a = [int]$matches[1]; $b = $a }",
+  "    elseif ($tok -match '^(\\d+)-(\\d+)$') { $a = [int]$matches[1]; $b = [int]$matches[2] }",
+  '    else { continue }',
+  '    if ($a -gt $b) { $t = $a; $a = $b; $b = $t }',
+  '    if ($a -lt 1) { $a = 1 }; if ($b -gt $n) { $b = $n }',
+  '    for ($k = $a; $k -le $b; $k++) { $out[$k - 1] = $true }',
+  '  }',
+  '  return @($out.Keys | Sort-Object)',
+  '}',
+]
+
 export const WATCH_SCRIPT = [
   "$ErrorActionPreference = 'SilentlyContinue'",
   'Add-Type -AssemblyName System.Windows.Forms',
@@ -89,13 +108,17 @@ export const WATCH_SCRIPT = [
   '  $f.Add_Shown({ [void][FastPaste.U]::ShowWindow($f.Handle, 5); [void][FastPaste.U]::SetForegroundWindow($f.Handle); $f.Activate() })',
   '  [void]$f.ShowDialog(); foreach ($c in $flow.Controls) { foreach ($x in $c.Controls) { if ($x.Image) { $x.Image.Dispose() } } }; $f.Dispose()',
   '}',
+  ...PS_PARSE_RANGE,
   // 골라 붙이기 창: 복사한 그림을 번호·체크칸과 함께 나란히 보여 주고, 고른 것만 "PICK 경로|경로|..." 한 줄로 알린다.
-  // 그림이나 체크칸을 누르면 고름/안 고름이 바뀐다. Enter 또는 [Paste] = 붙이기, A = 전부 고르기/전부 풀기, Esc = 취소(빈 PICK)
+  // 그림이나 체크칸을 누르면 고름/안 고름이 바뀐다. Shift+클릭 = 마지막에 누른 번호부터 지금 번호까지 한꺼번에(탐색기와 같은 범위 선택),
+  // 아래 Range 칸에 "1-20,25" 처럼 적으면 그 번호들이 켜진다(칸을 고치면 칸이 켠 것만 다시 계산하고 손으로 누른 것은 그대로).
+  // Enter 또는 [Paste] = 붙이기, A = 전부 고르기/전부 풀기(Range 칸에 글을 쓰는 중이면 글자로 들어간다), Esc = 취소(빈 PICK)
+  // 40장 중 20장을 고르려면 20번 눌러야 했던 것을 없애려고 넣었다(2026-10-26 사용자 요청)
   'function Show-Picker($paths) {',
   '  $paths = @($paths | Where-Object { Test-Path -LiteralPath $_ })',
   "  if ($paths.Count -eq 0) { Say 'PICK '; return }",
   '  $f = New-Object System.Windows.Forms.Form',
-  "  $f.Text = 'Pick images (' + $paths.Count + ')   (click: select, A: all, Enter: paste, Esc: cancel)'",
+  "  $f.Text = 'Pick images (' + $paths.Count + ')   (click: select, Shift+click: range, A: all, Enter: paste, Esc: cancel)'",
   "  $f.StartPosition = 'CenterScreen'; $f.TopMost = $true; $f.KeyPreview = $true; $f.ImeMode = 'Disable'",
   '  $wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea',
   '  $cols = [Math]::Min(4, $paths.Count); $rows = [Math]::Ceiling($paths.Count / $cols)',
@@ -103,26 +126,36 @@ export const WATCH_SCRIPT = [
   "  $flow = New-Object System.Windows.Forms.FlowLayoutPanel; $flow.Dock = 'Fill'; $flow.AutoScroll = $true",
   "  $bar = New-Object System.Windows.Forms.Panel; $bar.Dock = 'Bottom'; $bar.Height = 44",
   "  $ok = New-Object System.Windows.Forms.Button; $ok.Text = 'Paste (Enter)'; $ok.Width = 140; $ok.Height = 32; $ok.Top = 6; $ok.Left = 10",
-  "  $cnt = New-Object System.Windows.Forms.Label; $cnt.Left = 160; $cnt.Top = 13; $cnt.Width = 300; $cnt.Font = New-Object System.Drawing.Font('Segoe UI', 10)",
-  '  $bar.Controls.Add($ok); $bar.Controls.Add($cnt)',
+  // Range 칸: 라벨 + 글칸. 숫자·하이픈·쉼표만 받으므로 입력기는 끈다
+  "  $rl = New-Object System.Windows.Forms.Label; $rl.Text = 'Range (e.g. 1-20,25):'; $rl.Left = 160; $rl.Top = 13; $rl.Width = 150; $rl.Font = New-Object System.Drawing.Font('Segoe UI', 10)",
+  "  $rng = New-Object System.Windows.Forms.TextBox; $rng.Left = 312; $rng.Top = 9; $rng.Width = 150; $rng.ImeMode = 'Disable'; $rng.Font = New-Object System.Drawing.Font('Segoe UI', 10)",
+  "  $cnt = New-Object System.Windows.Forms.Label; $cnt.Left = 475; $cnt.Top = 13; $cnt.Width = 300; $cnt.Font = New-Object System.Drawing.Font('Segoe UI', 10)",
+  '  $bar.Controls.Add($ok); $bar.Controls.Add($rl); $bar.Controls.Add($rng); $bar.Controls.Add($cnt)',
   '  $f.Controls.Add($flow); $f.Controls.Add($bar)',
   '  $checks = New-Object System.Collections.ArrayList',
   "  $count = { $k = @($checks | Where-Object { $_.Checked }).Count; $cnt.Text = [string]$k + ' selected' }",
+  // 핸들러 안에서 바꿀 값은 해시표에 둔다(이벤트 블록 안의 대입은 바깥 변수를 바꾸지 못해서). last = 마지막에 누른 번호(Shift+클릭의 시작점), box = Range 칸이 켠 번호들
+  '  $st = @{ done = $false; last = -1; box = @{} }',
+  // 범위 [a..b] 를 v 로 맞춘다(a>b 면 뒤집음)
+  '  $setRange = { param($a, $b, $v) if ($a -gt $b) { $t = $a; $a = $b; $b = $t }; for ($k = $a; $k -le $b; $k++) { $checks[$k].Checked = $v } }',
+  '  $shift = { ([System.Windows.Forms.Control]::ModifierKeys -band [System.Windows.Forms.Keys]::Shift) -ne 0 }',
   '  for ($i = 0; $i -lt $paths.Count; $i++) {',
   '    $box = New-Object System.Windows.Forms.Panel; $box.Size = New-Object System.Drawing.Size 246, 204',
-  "    $cb = New-Object System.Windows.Forms.CheckBox; $cb.Text = [string]($i + 1); $cb.Dock = 'Top'; $cb.Height = 24; $cb.Font = New-Object System.Drawing.Font('Segoe UI', 11, [System.Drawing.FontStyle]::Bold)",
+  "    $cb = New-Object System.Windows.Forms.CheckBox; $cb.Text = [string]($i + 1); $cb.Dock = 'Top'; $cb.Height = 24; $cb.Font = New-Object System.Drawing.Font('Segoe UI', 11, [System.Drawing.FontStyle]::Bold); $cb.Tag = $i",
   '    $cb.Add_CheckedChanged({ & $count })',
-  "    $pb = New-Object System.Windows.Forms.PictureBox; $pb.Dock = 'Fill'; $pb.SizeMode = 'Zoom'; $pb.Cursor = 'Hand'; $pb.Tag = $cb",
+  // 체크칸 Click 은 Checked 가 바뀐 뒤에 온다 → Shift 면 그 새 값으로 범위를 맞춘다
+  '    $cb.Add_Click({ $j = $this.Tag; if ((& $shift) -and $st.last -ge 0) { & $setRange $st.last $j $this.Checked }; $st.last = $j })',
+  "    $pb = New-Object System.Windows.Forms.PictureBox; $pb.Dock = 'Fill'; $pb.SizeMode = 'Zoom'; $pb.Cursor = 'Hand'; $pb.Tag = $i",
   '    $pb.Image = Load-Img $paths[$i]',
-  '    $pb.Add_Click({ $this.Tag.Checked = -not $this.Tag.Checked })',
+  '    $pb.Add_Click({ $j = $this.Tag; $v = -not $checks[$j].Checked; if ((& $shift) -and $st.last -ge 0) { & $setRange $st.last $j $v } else { $checks[$j].Checked = $v }; $st.last = $j })',
   '    [void]$checks.Add($cb); $box.Controls.Add($pb); $box.Controls.Add($cb); $flow.Controls.Add($box)',
   '  }',
   '  & $count',
-  // 핸들러 안에서 바꿀 값은 해시표에 둔다(이벤트 블록 안의 대입은 바깥 변수를 바꾸지 못해서)
-  '  $st = @{ done = $false }',
+  // Range 칸이 바뀔 때마다: 이번 글이 가리키는 번호는 켜고, 지난번 글이 켰는데 이번엔 빠진 번호만 끈다(손으로 누른 것은 건드리지 않음)
+  '  $rng.Add_TextChanged({ $new = @{}; foreach ($k in (Parse-Range $rng.Text $checks.Count)) { $new[$k] = $true }; foreach ($k in @($st.box.Keys)) { if (-not $new.ContainsKey($k)) { $checks[$k].Checked = $false } }; foreach ($k in $new.Keys) { $checks[$k].Checked = $true }; $st.box = $new })',
   '  $ok.Add_Click({ $st.done = $true; $f.Close() })',
-  // A 키: 하나라도 안 골랐으면 전부 고르고, 전부 골랐으면 전부 푼다. 키 번호(65)로 본다 — 한글 입력기 대비(Show-Gallery 와 같은 이유)
-  "  $f.Add_KeyDown({ if ($_.KeyCode -eq 'Escape') { $f.Close() } elseif ($_.KeyCode -eq 'Return') { $_.Handled = $true; $st.done = $true; $f.Close() } elseif ($_.KeyValue -eq 65) { $all = @($checks | Where-Object { -not $_.Checked }).Count -gt 0; foreach ($c in $checks) { $c.Checked = $all } } })",
+  // A 키: 하나라도 안 골랐으면 전부 고르고, 전부 골랐으면 전부 푼다. 키 번호(65)로 본다 — 한글 입력기 대비(Show-Gallery 와 같은 이유). Range 칸에 쓰는 중이면 글자다
+  "  $f.Add_KeyDown({ if ($_.KeyCode -eq 'Escape') { $f.Close() } elseif ($_.KeyCode -eq 'Return') { $_.Handled = $true; $_.SuppressKeyPress = $true; $st.done = $true; $f.Close() } elseif ($_.KeyValue -eq 65 -and $f.ActiveControl -ne $rng) { $all = @($checks | Where-Object { -not $_.Checked }).Count -gt 0; foreach ($c in $checks) { $c.Checked = $all } } })",
   '  $f.Add_Shown({ [void][FastPaste.U]::ShowWindow($f.Handle, 5); [void][FastPaste.U]::SetForegroundWindow($f.Handle); $f.Activate() })',
   '  [void]$f.ShowDialog()',
   '  $sel = @(); if ($st.done) { for ($i = 0; $i -lt $paths.Count; $i++) { if ($checks[$i].Checked) { $sel += $paths[$i] } } }',

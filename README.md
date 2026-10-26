@@ -19,7 +19,7 @@ A one-line band appears above the prompt whenever there is something to paste. E
 | Paste | Alt+V | Insert the image you just copied |
 | View / View all | Alt+I | Open the pasted image(s) in a window: ←/→ to move, number keys to enlarge one, Esc to close |
 | Paste all | Alt+A | Insert every image copied since your last message, in order |
-| Pick | Alt+G | Open a gallery of recent copies (up to 40), tick the ones you want, Enter to paste |
+| Pick | Alt+G | Open a gallery of recent copies (up to 40), tick the ones you want, Enter to paste. Shift+click selects a range; the Range box takes `1-20,25` |
 
 Pasted images show in the prompt as `@C:\Users\you\.cfp\12345\1.png` and so on: short on purpose, because the watcher saves under `~/.cfp`. When you send the message, Claude Code reads those PNG files. If a file has gone missing before sending, you get a toast and Claude is told which images were dropped.
 
@@ -109,7 +109,7 @@ Claude Code 에서 화면 캡처를 **바로** 붙이는 윈도우 전용 플러
 | 붙이기 | Alt+V | 방금 복사한 그림 한 장을 넣는다 |
 | 보기 / 모두 보기 | Alt+I | 붙인 그림을 창으로 크게 본다 (←/→ 이동, 숫자 키 확대, Esc 닫기) |
 | 모두 붙이기 | Alt+A | 마지막 메시지 이후 복사한 그림 전부를 순서대로 넣는다 |
-| 골라 붙이기 | Alt+G | 최근 복사한 그림(최대 40장)을 체크해서 고른 것만 넣는다 |
+| 골라 붙이기 | Alt+G | 최근 복사한 그림(최대 40장)을 체크해서 고른 것만 넣는다. Shift+클릭이면 범위, 아래 Range 칸에 `1-20,25` 처럼 적어도 된다 |
 
 설치 뒤 "fast-paste 설정해줘" 라고 하면 같이 들어 있는 `fast-paste-setup` 스킬이 단축키 파일을 써 줍니다. 기본 붙여넣기는 Alt+Shift+V 로 옮겨집니다.
 

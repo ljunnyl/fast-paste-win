@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-26
+
+### Added
+- Pick window: **Shift+click** selects every image between the last one you clicked and this one (Explorer-style), and a **Range** box at the bottom accepts `1-20,25` and ticks those numbers as you type (reversed ranges are flipped, out-of-range numbers dropped, unreadable pieces ignored). Editing the box only re-applies what the box itself ticked; images you clicked by hand stay as they are. Picking 20 of 40 images used to take 20 clicks; now it is 2 clicks or one short line.
+
 ## [0.4.0] - 2026-10-23
 
 ### Added

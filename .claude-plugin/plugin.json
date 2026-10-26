@@ -1,7 +1,7 @@
 {
   "name": "fast-paste-win",
   "displayName": "Fast Paste for Windows",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Instant clipboard-image paste for Claude Code on Windows. One background PowerShell watches the clipboard and saves screenshots ahead of time, so Alt+V attaches them with no delay. Paste one, paste all, or pick from a gallery.",
   "author": {
     "name": "ljunnyl",
